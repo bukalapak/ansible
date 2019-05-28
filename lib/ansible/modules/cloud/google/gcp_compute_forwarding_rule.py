@@ -81,14 +81,8 @@ options:
     - The IP protocol to which this rule applies. Valid options are TCP, UDP, ESP,
       AH, SCTP or ICMP.
     - When the load balancing scheme is INTERNAL, only TCP and UDP are valid.
+    - 'Some valid choices include: "TCP", "UDP", "ESP", "AH", "SCTP", "ICMP"'
     required: false
-    choices:
-    - TCP
-    - UDP
-    - ESP
-    - AH
-    - SCTP
-    - ICMP
   backend_service:
     description:
     - A reference to a BackendService to receive the matched traffic.
@@ -102,12 +96,9 @@ options:
     required: false
   ip_version:
     description:
-    - The IP Version that will be used by this forwarding rule. Valid options are
-      IPV4 or IPV6. This can only be specified for a global forwarding rule.
+    - ipVersion is not a valid field for regional forwarding rules.
+    - 'Some valid choices include: "IPV4", "IPV6"'
     required: false
-    choices:
-    - IPV4
-    - IPV6
   load_balancing_scheme:
     description:
     - 'This signifies what the ForwardingRule will be used for and can only take the
@@ -115,10 +106,8 @@ options:
       be used for Internal Network Load Balancing (TCP, UDP). The value of EXTERNAL
       means that this will be used for External Load Balancing (HTTP(S) LB, External
       TCP/UDP LB, SSL Proxy) .'
+    - 'Some valid choices include: "INTERNAL", "EXTERNAL"'
     required: false
-    choices:
-    - INTERNAL
-    - EXTERNAL
   name:
     description:
     - Name of the resource; provided by the client when the resource is created. The
@@ -204,11 +193,9 @@ options:
     - 'The networking tier used for configuring this address. This field can take
       the following values: PREMIUM or STANDARD. If this field is not specified, it
       is assumed to be PREMIUM.'
+    - 'Some valid choices include: "PREMIUM", "STANDARD"'
     required: false
     version_added: 2.8
-    choices:
-    - PREMIUM
-    - STANDARD
   service_label:
     description:
     - An optional prefix to the service name for this Forwarding Rule.
@@ -458,10 +445,10 @@ def main():
             state=dict(default='present', choices=['present', 'absent'], type='str'),
             description=dict(type='str'),
             ip_address=dict(type='str'),
-            ip_protocol=dict(type='str', choices=['TCP', 'UDP', 'ESP', 'AH', 'SCTP', 'ICMP']),
+            ip_protocol=dict(type='str'),
             backend_service=dict(type='dict'),
-            ip_version=dict(type='str', choices=['IPV4', 'IPV6']),
-            load_balancing_scheme=dict(type='str', choices=['INTERNAL', 'EXTERNAL']),
+            ip_version=dict(type='str'),
+            load_balancing_scheme=dict(type='str'),
             name=dict(required=True, type='str'),
             network=dict(type='dict'),
             port_range=dict(type='str'),
@@ -469,7 +456,7 @@ def main():
             subnetwork=dict(type='dict'),
             target=dict(type='dict'),
             all_ports=dict(type='bool'),
-            network_tier=dict(type='str', choices=['PREMIUM', 'STANDARD']),
+            network_tier=dict(type='str'),
             service_label=dict(type='str'),
             region=dict(required=True, type='str'),
         )

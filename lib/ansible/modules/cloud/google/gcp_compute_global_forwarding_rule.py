@@ -81,46 +81,25 @@ options:
   ip_protocol:
     description:
     - The IP protocol to which this rule applies. Valid options are TCP, UDP, ESP,
-      AH, SCTP or ICMP.
-    - When the load balancing scheme is INTERNAL, only TCP and UDP are valid.
-    required: false
-    choices:
-    - TCP
-    - UDP
-    - ESP
-    - AH
-    - SCTP
-    - ICMP
-  backend_service:
-    description:
-    - A reference to a BackendService to receive the matched traffic.
-    - This is used for internal load balancing.
-    - "(not used for external load balancing) ."
-    - 'This field represents a link to a BackendService resource in GCP. It can be
-      specified in two ways. First, you can place a dictionary with key ''selfLink''
-      and value of your resource''s selfLink Alternatively, you can add `register:
-      name-of-resource` to a gcp_compute_backend_service task and then set this backend_service
-      field to "{{ name-of-resource }}"'
+      AH, SCTP or ICMP. When the load balancing scheme is INTERNAL_SELF_MANAGED, only
+      TCP is valid.
+    - 'Some valid choices include: "TCP", "UDP", "ESP", "AH", "SCTP", "ICMP"'
     required: false
   ip_version:
     description:
-    - The IP Version that will be used by this forwarding rule. Valid options are
-      IPV4 or IPV6. This can only be specified for a global forwarding rule.
+    - The IP Version that will be used by this global forwarding rule.
+    - Valid options are IPV4 or IPV6.
+    - 'Some valid choices include: "IPV4", "IPV6"'
     required: false
-    choices:
-    - IPV4
-    - IPV6
   load_balancing_scheme:
     description:
-    - 'This signifies what the ForwardingRule will be used for and can only take the
-      following values: INTERNAL, EXTERNAL The value of INTERNAL means that this will
-      be used for Internal Network Load Balancing (TCP, UDP). The value of EXTERNAL
-      means that this will be used for External Load Balancing (HTTP(S) LB, External
-      TCP/UDP LB, SSL Proxy) .'
+    - This signifies what the GlobalForwardingRule will be used for.
+    - 'The value of INTERNAL_SELF_MANAGED means that this will be used for Internal
+      Global HTTP(S) LB. The value of EXTERNAL means that this will be used for External
+      Global Load Balancing (HTTP(S) LB, External TCP/UDP LB, SSL Proxy) NOTE: Currently
+      global forwarding rules cannot be used for INTERNAL load balancing.'
+    - 'Some valid choices include: "INTERNAL_SELF_MANAGED", "EXTERNAL"'
     required: false
-    choices:
-    - INTERNAL
-    - EXTERNAL
   name:
     description:
     - Name of the resource; provided by the client when the resource is created. The
@@ -423,10 +402,9 @@ def main():
             state=dict(default='present', choices=['present', 'absent'], type='str'),
             description=dict(type='str'),
             ip_address=dict(type='str'),
-            ip_protocol=dict(type='str', choices=['TCP', 'UDP', 'ESP', 'AH', 'SCTP', 'ICMP']),
-            backend_service=dict(type='dict'),
-            ip_version=dict(type='str', choices=['IPV4', 'IPV6']),
-            load_balancing_scheme=dict(type='str', choices=['INTERNAL', 'EXTERNAL']),
+            ip_protocol=dict(type='str'),
+            ip_version=dict(type='str'),
+            load_balancing_scheme=dict(type='str'),
             name=dict(required=True, type='str'),
             network=dict(type='dict'),
             port_range=dict(type='str'),

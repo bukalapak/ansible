@@ -65,13 +65,9 @@ options:
         - Specifies the balancing mode for this backend.
         - For global HTTP(S) or TCP/SSL load balancing, the default is UTILIZATION.
           Valid values are UTILIZATION, RATE (for HTTP(S)) and CONNECTION (for TCP/SSL).
-        - This cannot be used for internal load balancing.
+        - 'Some valid choices include: "UTILIZATION", "RATE", "CONNECTION"'
         required: false
         default: UTILIZATION
-        choices:
-        - UTILIZATION
-        - RATE
-        - CONNECTION
       capacity_scaler:
         description:
         - A multiplier applied to the group's maximum servicing capacity (based on
@@ -249,13 +245,12 @@ options:
     description:
     - Indicates whether the backend service will be used with internal or external
       load balancing. A backend service created for one type of load balancing cannot
-      be used with the other. One of `INTERNAL` or `EXTERNAL`. Defaults to `EXTERNAL`.
+      be used with the other. Must be `EXTERNAL` for a global backend service. Defaults
+      to `EXTERNAL`.
+    - 'Some valid choices include: "EXTERNAL"'
     required: false
     default: EXTERNAL
     version_added: 2.7
-    choices:
-    - INTERNAL
-    - EXTERNAL
   name:
     description:
     - Name of the resource. Provided by the client when the resource is created. The
@@ -274,15 +269,11 @@ options:
   protocol:
     description:
     - The protocol this BackendService uses to communicate with backends.
-    - Possible values are HTTP, HTTPS, TCP, and SSL. The default is HTTP.
-    - For internal load balancing, the possible values are TCP and UDP, and the default
-      is TCP.
+    - 'Possible values are HTTP, HTTPS, HTTP2, TCP, and SSL. The default is HTTP.
+      **NOTE**: HTTP2 is only valid for beta HTTP/2 load balancer types and may result
+      in errors if used with the GA API.'
+    - 'Some valid choices include: "HTTP", "HTTPS", "HTTP2", "TCP", "SSL"'
     required: false
-    choices:
-    - HTTP
-    - HTTPS
-    - TCP
-    - SSL
   security_policy:
     description:
     - The security policy associated with this backend service.
@@ -295,13 +286,8 @@ options:
     - When the load balancing scheme is INTERNAL, can be NONE, CLIENT_IP, CLIENT_IP_PROTO,
       or CLIENT_IP_PORT_PROTO.
     - When the protocol is UDP, this field is not used.
+    - 'Some valid choices include: "NONE", "CLIENT_IP", "GENERATED_COOKIE"'
     required: false
-    choices:
-    - NONE
-    - CLIENT_IP
-    - GENERATED_COOKIE
-    - CLIENT_IP_PROTO
-    - CLIENT_IP_PORT_PROTO
   timeout_sec:
     description:
     - How many seconds to wait for the backend before considering it a failed request.
@@ -653,7 +639,7 @@ def main():
                 type='list',
                 elements='dict',
                 options=dict(
-                    balancing_mode=dict(default='UTILIZATION', type='str', choices=['UTILIZATION', 'RATE', 'CONNECTION']),
+                    balancing_mode=dict(default='UTILIZATION', type='str'),
                     capacity_scaler=dict(default=1.0, type='str'),
                     description=dict(type='str'),
                     group=dict(type='dict'),
@@ -688,12 +674,12 @@ def main():
                 type='dict',
                 options=dict(enabled=dict(type='bool'), oauth2_client_id=dict(required=True, type='str'), oauth2_client_secret=dict(required=True, type='str')),
             ),
-            load_balancing_scheme=dict(default='EXTERNAL', type='str', choices=['INTERNAL', 'EXTERNAL']),
+            load_balancing_scheme=dict(default='EXTERNAL', type='str'),
             name=dict(required=True, type='str'),
             port_name=dict(type='str'),
-            protocol=dict(type='str', choices=['HTTP', 'HTTPS', 'TCP', 'SSL']),
+            protocol=dict(type='str'),
             security_policy=dict(type='str'),
-            session_affinity=dict(type='str', choices=['NONE', 'CLIENT_IP', 'GENERATED_COOKIE', 'CLIENT_IP_PROTO', 'CLIENT_IP_PORT_PROTO']),
+            session_affinity=dict(type='str'),
             timeout_sec=dict(type='int', aliases=['timeout_seconds']),
         )
     )
