@@ -62,6 +62,11 @@ options:
     - An optional description of this resource. Provide this property when you create
       the resource.
     required: false
+  fingerprint:
+    description:
+    - An optional fingerprint of this resource. Provide this property when you update
+      the resource.
+    required: false
   host_rules:
     description:
     - The list of HostRules to use against the URL.
@@ -370,6 +375,7 @@ def main():
             state=dict(default='present', choices=['present', 'absent'], type='str'),
             default_service=dict(required=True, type='dict'),
             description=dict(type='str'),
+            fingerprint=dict(type='str'),
             host_rules=dict(
                 type='list',
                 elements='dict',
