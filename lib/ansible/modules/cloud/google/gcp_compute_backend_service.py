@@ -31,8 +31,11 @@ DOCUMENTATION = '''
 ---
 module: gcp_compute_backend_service
 description:
-- Creates a BackendService resource in the specified project using the data included
-  in the request.
+- A Backend Service defines a group of virtual machines that will serve traffic for
+  load balancing. This resource is a global backend service, appropriate for external
+  load balancing or self-managed internal load balancing.
+- For managed internal load balancing, use a regional backend service instead.
+- Currently self-managed internal load balancing is only available in beta.
 short_description: Creates a GCP BackendService
 version_added: 2.6
 author: Google Inc. (@googlecloudplatform)
@@ -245,9 +248,9 @@ options:
     description:
     - Indicates whether the backend service will be used with internal or external
       load balancing. A backend service created for one type of load balancing cannot
-      be used with the other. Must be `EXTERNAL` for a global backend service. Defaults
-      to `EXTERNAL`.
-    - 'Some valid choices include: "EXTERNAL"'
+      be used with the other. Must be `EXTERNAL` or `INTERNAL_SELF_MANAGED` for a
+      global backend service. Defaults to `EXTERNAL`.
+    - 'Some valid choices include: "EXTERNAL", "INTERNAL_SELF_MANAGED"'
     required: false
     default: EXTERNAL
     version_added: 2.7
@@ -565,7 +568,8 @@ loadBalancingScheme:
   description:
   - Indicates whether the backend service will be used with internal or external load
     balancing. A backend service created for one type of load balancing cannot be
-    used with the other. One of `INTERNAL` or `EXTERNAL`. Defaults to `EXTERNAL`.
+    used with the other. Must be `EXTERNAL` or `INTERNAL_SELF_MANAGED` for a global
+    backend service. Defaults to `EXTERNAL`.
   returned: success
   type: str
 name:
