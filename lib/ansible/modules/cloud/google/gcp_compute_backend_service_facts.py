@@ -120,9 +120,8 @@ items:
           description:
           - The max number of simultaneous connections for the group. Can be used
             with either CONNECTION or UTILIZATION balancing modes.
-          - For CONNECTION mode, either maxConnections or maxConnectionsPerInstance
-            must be set.
-          - This cannot be used for internal load balancing.
+          - For CONNECTION mode, either maxConnections or one of maxConnectionsPerInstance
+            or maxConnectionsPerEndpoint, as appropriate for group type, must be set.
           returned: success
           type: int
         maxConnectionsPerInstance:
@@ -135,13 +134,21 @@ items:
           - This cannot be used for internal load balancing.
           returned: success
           type: int
+        maxConnectionsPerEndpoint:
+          description:
+          - The max number of simultaneous connections that a single backend network
+            endpoint can handle. This is used to calculate the capacity of the group.
+            Can be used in either CONNECTION or UTILIZATION balancing modes.
+          - For CONNECTION mode, either maxConnections or maxConnectionsPerEndpoint
+            must be set.
+          returned: success
+          type: int
         maxRate:
           description:
           - The max requests per second (RPS) of the group.
           - Can be used with either RATE or UTILIZATION balancing modes, but required
-            if RATE mode. For RATE mode, either maxRate or maxRatePerInstance must
-            be set.
-          - This cannot be used for internal load balancing.
+            if RATE mode. For RATE mode, either maxRate or one of maxRatePerInstance
+            or maxRatePerEndpoint, as appropriate for group type, must be set.
           returned: success
           type: int
         maxRatePerInstance:
@@ -151,6 +158,14 @@ items:
             balancing mode. For RATE mode, either maxRate or maxRatePerInstance must
             be set.
           - This cannot be used for internal load balancing.
+          returned: success
+          type: str
+        maxRatePerEndpoint:
+          description:
+          - The max requests per second (RPS) that a single backend network endpoint
+            can handle. This is used to calculate the capacity of the group. Can be
+            used in either balancing mode. For RATE mode, either maxRate or maxRatePerEndpoint
+            must be set.
           returned: success
           type: str
         maxUtilization:

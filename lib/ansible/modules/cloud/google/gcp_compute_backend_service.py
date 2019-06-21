@@ -106,9 +106,8 @@ options:
         description:
         - The max number of simultaneous connections for the group. Can be used with
           either CONNECTION or UTILIZATION balancing modes.
-        - For CONNECTION mode, either maxConnections or maxConnectionsPerInstance
-          must be set.
-        - This cannot be used for internal load balancing.
+        - For CONNECTION mode, either maxConnections or one of maxConnectionsPerInstance
+          or maxConnectionsPerEndpoint, as appropriate for group type, must be set.
         required: false
       max_connections_per_instance:
         description:
@@ -119,13 +118,21 @@ options:
           must be set.
         - This cannot be used for internal load balancing.
         required: false
+      max_connections_per_endpoint:
+        description:
+        - The max number of simultaneous connections that a single backend network
+          endpoint can handle. This is used to calculate the capacity of the group.
+          Can be used in either CONNECTION or UTILIZATION balancing modes.
+        - For CONNECTION mode, either maxConnections or maxConnectionsPerEndpoint
+          must be set.
+        required: false
+        version_added: 2.9
       max_rate:
         description:
         - The max requests per second (RPS) of the group.
         - Can be used with either RATE or UTILIZATION balancing modes, but required
-          if RATE mode. For RATE mode, either maxRate or maxRatePerInstance must be
-          set.
-        - This cannot be used for internal load balancing.
+          if RATE mode. For RATE mode, either maxRate or one of maxRatePerInstance
+          or maxRatePerEndpoint, as appropriate for group type, must be set.
         required: false
       max_rate_per_instance:
         description:
@@ -135,6 +142,14 @@ options:
           be set.
         - This cannot be used for internal load balancing.
         required: false
+      max_rate_per_endpoint:
+        description:
+        - The max requests per second (RPS) that a single backend network endpoint
+          can handle. This is used to calculate the capacity of the group. Can be
+          used in either balancing mode. For RATE mode, either maxRate or maxRatePerEndpoint
+          must be set.
+        required: false
+        version_added: 2.9
       max_utilization:
         description:
         - Used when balancingMode is UTILIZATION. This ratio defines the CPU utilization
@@ -393,9 +408,8 @@ backends:
       description:
       - The max number of simultaneous connections for the group. Can be used with
         either CONNECTION or UTILIZATION balancing modes.
-      - For CONNECTION mode, either maxConnections or maxConnectionsPerInstance must
-        be set.
-      - This cannot be used for internal load balancing.
+      - For CONNECTION mode, either maxConnections or one of maxConnectionsPerInstance
+        or maxConnectionsPerEndpoint, as appropriate for group type, must be set.
       returned: success
       type: int
     maxConnectionsPerInstance:
@@ -408,13 +422,21 @@ backends:
       - This cannot be used for internal load balancing.
       returned: success
       type: int
+    maxConnectionsPerEndpoint:
+      description:
+      - The max number of simultaneous connections that a single backend network endpoint
+        can handle. This is used to calculate the capacity of the group. Can be used
+        in either CONNECTION or UTILIZATION balancing modes.
+      - For CONNECTION mode, either maxConnections or maxConnectionsPerEndpoint must
+        be set.
+      returned: success
+      type: int
     maxRate:
       description:
       - The max requests per second (RPS) of the group.
       - Can be used with either RATE or UTILIZATION balancing modes, but required
-        if RATE mode. For RATE mode, either maxRate or maxRatePerInstance must be
-        set.
-      - This cannot be used for internal load balancing.
+        if RATE mode. For RATE mode, either maxRate or one of maxRatePerInstance or
+        maxRatePerEndpoint, as appropriate for group type, must be set.
       returned: success
       type: int
     maxRatePerInstance:
@@ -424,6 +446,14 @@ backends:
         balancing mode. For RATE mode, either maxRate or maxRatePerInstance must be
         set.
       - This cannot be used for internal load balancing.
+      returned: success
+      type: str
+    maxRatePerEndpoint:
+      description:
+      - The max requests per second (RPS) that a single backend network endpoint can
+        handle. This is used to calculate the capacity of the group. Can be used in
+        either balancing mode. For RATE mode, either maxRate or maxRatePerEndpoint
+        must be set.
       returned: success
       type: str
     maxUtilization:
@@ -649,8 +679,10 @@ def main():
                     group=dict(type='dict'),
                     max_connections=dict(type='int'),
                     max_connections_per_instance=dict(type='int'),
+                    max_connections_per_endpoint=dict(type='int'),
                     max_rate=dict(type='int'),
                     max_rate_per_instance=dict(type='str'),
+                    max_rate_per_endpoint=dict(type='str'),
                     max_utilization=dict(default=0.8, type='str'),
                 ),
             ),
@@ -916,8 +948,10 @@ class BackendServiceBackendsArray(object):
                 u'group': replace_resource_dict(item.get(u'group', {}), 'selfLink'),
                 u'maxConnections': item.get('max_connections'),
                 u'maxConnectionsPerInstance': item.get('max_connections_per_instance'),
+                u'maxConnectionsPerEndpoint': item.get('max_connections_per_endpoint'),
                 u'maxRate': item.get('max_rate'),
                 u'maxRatePerInstance': item.get('max_rate_per_instance'),
+                u'maxRatePerEndpoint': item.get('max_rate_per_endpoint'),
                 u'maxUtilization': item.get('max_utilization'),
             }
         )
@@ -931,8 +965,10 @@ class BackendServiceBackendsArray(object):
                 u'group': item.get(u'group'),
                 u'maxConnections': item.get(u'maxConnections'),
                 u'maxConnectionsPerInstance': item.get(u'maxConnectionsPerInstance'),
+                u'maxConnectionsPerEndpoint': item.get(u'maxConnectionsPerEndpoint'),
                 u'maxRate': item.get(u'maxRate'),
                 u'maxRatePerInstance': item.get(u'maxRatePerInstance'),
+                u'maxRatePerEndpoint': item.get(u'maxRatePerEndpoint'),
                 u'maxUtilization': item.get(u'maxUtilization'),
             }
         )
