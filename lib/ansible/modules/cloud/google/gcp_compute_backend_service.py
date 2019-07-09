@@ -60,7 +60,7 @@ options:
     required: false
   backends:
     description:
-    - The list of backends that serve this BackendService.
+    - The set of backends that serve this BackendService.
     required: false
     suboptions:
       balancing_mode:
@@ -234,7 +234,7 @@ options:
     type: bool
   health_checks:
     description:
-    - The list of URLs to the HttpHealthCheck or HttpsHealthCheck resource for health
+    - The set of URLs to the HttpHealthCheck or HttpsHealthCheck resource for health
       checking this BackendService. Currently at most one health check can be specified,
       and a health check is required.
     - For internal load balancing, a URL to a HealthCheck resource must be specified
@@ -344,7 +344,7 @@ EXAMPLES = '''
   gcp_compute_backend_service:
     name: test_object
     backends:
-    - group: "{{ instancegroup }}"
+    - group: "{{ instancegroup.selfLink }}"
     health_checks:
     - "{{ healthcheck.selfLink }}"
     enable_cdn: 'true'
@@ -365,7 +365,7 @@ affinityCookieTtlSec:
   type: int
 backends:
   description:
-  - The list of backends that serve this BackendService.
+  - The set of backends that serve this BackendService.
   returned: success
   type: complex
   contains:
@@ -556,7 +556,7 @@ enableCDN:
   type: bool
 healthChecks:
   description:
-  - The list of URLs to the HttpHealthCheck or HttpsHealthCheck resource for health
+  - The set of URLs to the HttpHealthCheck or HttpsHealthCheck resource for health
     checking this BackendService. Currently at most one health check can be specified,
     and a health check is required.
   - For internal load balancing, a URL to a HealthCheck resource must be specified
