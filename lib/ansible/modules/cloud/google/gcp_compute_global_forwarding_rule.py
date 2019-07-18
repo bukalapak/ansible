@@ -56,6 +56,7 @@ options:
     - An optional description of this resource. Provide this property when you create
       the resource.
     required: false
+    type: str
   ip_address:
     description:
     - The IP address that this forwarding rule is serving on behalf of.
@@ -78,6 +79,7 @@ options:
       * projects/project/regions/region/addresses/address * regions/region/addresses/address
       * global/addresses/address * address .'
     required: false
+    type: str
   ip_protocol:
     description:
     - The IP protocol to which this rule applies. Valid options are TCP, UDP, ESP,
@@ -85,12 +87,14 @@ options:
       TCP is valid.
     - 'Some valid choices include: "TCP", "UDP", "ESP", "AH", "SCTP", "ICMP"'
     required: false
+    type: str
   ip_version:
     description:
     - The IP Version that will be used by this global forwarding rule.
     - Valid options are IPV4 or IPV6.
     - 'Some valid choices include: "IPV4", "IPV6"'
     required: false
+    type: str
   load_balancing_scheme:
     description:
     - This signifies what the GlobalForwardingRule will be used for.
@@ -101,6 +105,7 @@ options:
     - 'Some valid choices include: "INTERNAL_SELF_MANAGED", "EXTERNAL"'
     required: false
     default: EXTERNAL
+    type: str
   name:
     description:
     - Name of the resource; provided by the client when the resource is created. The
@@ -110,6 +115,7 @@ options:
       characters must be a dash, lowercase letter, or digit, except the last character,
       which cannot be a dash.
     required: true
+    type: str
   network:
     description:
     - For internal load balancing, this field identifies the network that the load
@@ -122,6 +128,7 @@ options:
       to a gcp_compute_network task and then set this network field to "{{ name-of-resource
       }}"'
     required: false
+    type: dict
   port_range:
     description:
     - This field is used along with the target field for TargetHttpProxy, TargetHttpsProxy,
@@ -136,34 +143,13 @@ options:
       43, 110, 143, 195, 443, 465, 587, 700, 993, 995, 1883, 5222 * TargetVpnGateway:
       500, 4500 .'
     required: false
-  ports:
-    description:
-    - This field is used along with the backend_service field for internal load balancing.
-    - When the load balancing scheme is INTERNAL, a single port or a comma separated
-      list of ports can be configured. Only packets addressed to these ports will
-      be forwarded to the backends configured with this forwarding rule.
-    - You may specify a maximum of up to 5 ports.
-    required: false
-  subnetwork:
-    description:
-    - A reference to a subnetwork.
-    - For internal load balancing, this field identifies the subnetwork that the load
-      balanced IP should belong to for this Forwarding Rule.
-    - If the network specified is in auto subnet mode, this field is optional. However,
-      if the network is in custom subnet mode, a subnetwork must be specified.
-    - This field is not used for external load balancing.
-    - 'This field represents a link to a Subnetwork resource in GCP. It can be specified
-      in two ways. First, you can place a dictionary with key ''selfLink'' and value
-      of your resource''s selfLink Alternatively, you can add `register: name-of-resource`
-      to a gcp_compute_subnetwork task and then set this subnetwork field to "{{ name-of-resource
-      }}"'
-    required: false
+    type: str
   target:
     description:
-    - This target must be a global load balancing resource. The forwarded traffic
-      must be of a type appropriate to the target object.
-    - 'Valid types: HTTP_PROXY, HTTPS_PROXY, SSL_PROXY, TCP_PROXY .'
-    required: false
+    - The URL of the target resource to receive the matched traffic.
+    - The forwarded traffic must be of a type appropriate to the target object.
+    required: true
+    type: str
 extends_documentation_fragment: gcp
 '''
 
