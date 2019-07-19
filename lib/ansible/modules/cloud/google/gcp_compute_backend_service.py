@@ -58,10 +58,12 @@ options:
       session (or equivalent). The maximum allowed value for TTL is one day.
     - When the load balancing scheme is INTERNAL, this field is not used.
     required: false
+    type: int
   backends:
     description:
     - The set of backends that serve this BackendService.
     required: false
+    type: list
     suboptions:
       balancing_mode:
         description:
@@ -71,6 +73,7 @@ options:
         - 'Some valid choices include: "UTILIZATION", "RATE", "CONNECTION"'
         required: false
         default: UTILIZATION
+        type: str
       capacity_scaler:
         description:
         - A multiplier applied to the group's maximum servicing capacity (based on
@@ -82,11 +85,13 @@ options:
         - This cannot be used for internal load balancing.
         required: false
         default: '1.0'
+        type: str
       description:
         description:
         - An optional description of this resource.
         - Provide this property when you create the resource.
         required: false
+        type: str
       group:
         description:
         - This instance group defines the list of instances that serve traffic. Member
@@ -102,6 +107,7 @@ options:
           name-of-resource` to a gcp_compute_instance_group task and then set this
           group field to "{{ name-of-resource }}"'
         required: false
+        type: str
       max_connections:
         description:
         - The max number of simultaneous connections for the group. Can be used with
@@ -109,6 +115,7 @@ options:
         - For CONNECTION mode, either maxConnections or one of maxConnectionsPerInstance
           or maxConnectionsPerEndpoint, as appropriate for group type, must be set.
         required: false
+        type: int
       max_connections_per_instance:
         description:
         - The max number of simultaneous connections that a single backend instance
@@ -118,6 +125,7 @@ options:
           must be set.
         - This cannot be used for internal load balancing.
         required: false
+        type: int
       max_connections_per_endpoint:
         description:
         - The max number of simultaneous connections that a single backend network
@@ -126,6 +134,7 @@ options:
         - For CONNECTION mode, either maxConnections or maxConnectionsPerEndpoint
           must be set.
         required: false
+        type: int
         version_added: 2.9
       max_rate:
         description:
@@ -134,6 +143,7 @@ options:
           if RATE mode. For RATE mode, either maxRate or one of maxRatePerInstance
           or maxRatePerEndpoint, as appropriate for group type, must be set.
         required: false
+        type: int
       max_rate_per_instance:
         description:
         - The max requests per second (RPS) that a single backend instance can handle.
@@ -142,6 +152,7 @@ options:
           be set.
         - This cannot be used for internal load balancing.
         required: false
+        type: str
       max_rate_per_endpoint:
         description:
         - The max requests per second (RPS) that a single backend network endpoint
@@ -149,6 +160,7 @@ options:
           used in either balancing mode. For RATE mode, either maxRate or maxRatePerEndpoint
           must be set.
         required: false
+        type: str
         version_added: 2.9
       max_utilization:
         description:
@@ -157,15 +169,18 @@ options:
         - This cannot be used for internal load balancing.
         required: false
         default: '0.8'
+        type: str
   cdn_policy:
     description:
     - Cloud CDN configuration for this BackendService.
     required: false
+    type: dict
     suboptions:
       cache_key_policy:
         description:
         - The CacheKeyPolicy for this CdnPolicy.
         required: false
+        type: dict
         suboptions:
           include_host:
             description:
@@ -192,6 +207,7 @@ options:
               or query_string_blacklist, not both.
             - "'&' and '=' will be percent encoded and not treated as delimiters."
             required: false
+            type: list
           query_string_whitelist:
             description:
             - Names of query string parameters to include in cache keys.
@@ -199,6 +215,7 @@ options:
               or query_string_blacklist, not both.
             - "'&' and '=' will be percent encoded and not treated as delimiters."
             required: false
+            type: list
       signed_url_cache_max_age_sec:
         description:
         - Maximum number of seconds the response to a signed URL request will be considered
@@ -210,11 +227,13 @@ options:
           The actual headers served in responses will not be altered.'
         required: false
         default: '3600'
+        type: int
         version_added: 2.8
   connection_draining:
     description:
     - Settings for connection draining .
     required: false
+    type: dict
     suboptions:
       draining_timeout_sec:
         description:
@@ -222,10 +241,12 @@ options:
           still work to finish started).
         required: false
         default: '300'
+        type: int
   description:
     description:
     - An optional description of this resource.
     required: false
+    type: str
   enable_cdn:
     description:
     - If true, enable Cloud CDN for this BackendService.
@@ -240,10 +261,12 @@ options:
     - For internal load balancing, a URL to a HealthCheck resource must be specified
       instead.
     required: true
+    type: list
   iap:
     description:
     - Settings for enabling Cloud Identity Aware Proxy.
     required: false
+    type: dict
     version_added: 2.7
     suboptions:
       enabled:
@@ -255,10 +278,12 @@ options:
         description:
         - OAuth2 Client ID for IAP .
         required: true
+        type: str
       oauth2_client_secret:
         description:
         - OAuth2 Client Secret for IAP .
         required: true
+        type: str
   load_balancing_scheme:
     description:
     - Indicates whether the backend service will be used with internal or external
@@ -268,6 +293,7 @@ options:
     - 'Some valid choices include: "EXTERNAL", "INTERNAL_SELF_MANAGED"'
     required: false
     default: EXTERNAL
+    type: str
     version_added: 2.7
   name:
     description:
@@ -278,12 +304,14 @@ options:
       characters must be a dash, lowercase letter, or digit, except the last character,
       which cannot be a dash.
     required: true
+    type: str
   port_name:
     description:
     - Name of backend port. The same name should appear in the instance groups referenced
       by this service. Required when the load balancing scheme is EXTERNAL.
     - When the load balancing scheme is INTERNAL, this field is not used.
     required: false
+    type: str
   protocol:
     description:
     - The protocol this BackendService uses to communicate with backends.
@@ -292,10 +320,12 @@ options:
       in errors if used with the GA API.'
     - 'Some valid choices include: "HTTP", "HTTPS", "HTTP2", "TCP", "SSL"'
     required: false
+    type: str
   security_policy:
     description:
     - The security policy associated with this backend service.
     required: false
+    type: str
     version_added: 2.8
   session_affinity:
     description:
@@ -306,11 +336,13 @@ options:
     - When the protocol is UDP, this field is not used.
     - 'Some valid choices include: "NONE", "CLIENT_IP", "GENERATED_COOKIE"'
     required: false
+    type: str
   timeout_sec:
     description:
     - How many seconds to wait for the backend before considering it a failed request.
       Default is 30 seconds. Valid range is [1, 86400].
     required: false
+    type: int
     aliases:
     - timeout_seconds
 extends_documentation_fragment: gcp
