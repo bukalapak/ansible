@@ -186,7 +186,7 @@ def create(module, link):
 
 
 def update(module, link):
-    module.fail_json(msg="Database cannot be edited")
+    module.fail_json(msg="Spanner objects can't be updated to ensure data safety")
 
 
 def delete(module, link):
