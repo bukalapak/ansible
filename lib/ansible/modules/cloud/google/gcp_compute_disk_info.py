@@ -102,7 +102,7 @@ items:
       type: str
     lastDetachTimestamp:
       description:
-      - Last dettach timestamp in RFC3339 text format.
+      - Last detach timestamp in RFC3339 text format.
       returned: success
       type: str
     labels:
