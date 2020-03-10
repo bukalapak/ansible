@@ -1184,12 +1184,9 @@ def response_to_hash(module, response):
     }
 
 
-def disk_type_selflink(name, params):
+def disk_type_name(name, params):
     if name is None:
         return
-    url = r"https://www.googleapis.com/compute/v1/projects/.*/zones/.*/diskTypes/.*"
-    if not re.match(url, name):
-        name = "https://www.googleapis.com/compute/v1/projects/{project}/zones/{zone}/diskTypes/%s".format(**params) % name
     return name
 
 
@@ -1409,7 +1406,7 @@ class InstanceTemplateInitializeparams(object):
             {
                 u'diskName': self.request.get('disk_name'),
                 u'diskSizeGb': self.request.get('disk_size_gb'),
-                u'diskType': disk_type_selflink(self.request.get('disk_type'), self.module.params),
+                u'diskType': disk_type_name(self.request.get('disk_type'), self.module.params),
                 u'sourceImage': self.request.get('source_image'),
                 u'sourceImageEncryptionKey': InstanceTemplateSourceimageencryptionkey(
                     self.request.get('source_image_encryption_key', {}), self.module
