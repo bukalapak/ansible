@@ -1,3 +1,7 @@
+- name: End play on CentOS 8
+  meta: end_play
+  when: ansible_facts.distribution ~ ansible_facts.distribution_major_version == 'CentOS8'
+
 - name: python 2
   set_fact:
     python_suffix: ""
@@ -125,6 +129,12 @@
       - pt_BR
     loop_control:
       loop_var: locale
+
+  - name: Reinstall internationalization files
+    shell: 'yum -y reinstall glibc-common || yum -y install glibc-common'
+    args:
+      warn: no
+    when: locale_present is failed
 
   - name: Generate locale (RedHat)
     command: 'localedef -f ISO-8859-1 -i {{ item.locale }} {{ item.locale }}'

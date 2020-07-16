@@ -5,6 +5,7 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
+import hashlib
 import json
 import os
 import tarfile
@@ -13,7 +14,7 @@ import time
 
 from ansible import context
 from ansible.errors import AnsibleError
-from ansible.module_utils.ansible_release import __version__ as ansible_version
+from ansible.galaxy.user_agent import user_agent
 from ansible.module_utils.six import string_types
 from ansible.module_utils.six.moves.urllib.error import HTTPError
 from ansible.module_utils.six.moves.urllib.parse import quote as urlquote, urlencode, urlparse
@@ -53,19 +54,27 @@ def g_connect(versions):
 
                 try:
                     data = self._call_galaxy(n_url, method='GET', error_context_msg=error_context_msg)
-                except (AnsibleError, GalaxyError, ValueError, KeyError):
+                except (AnsibleError, GalaxyError, ValueError, KeyError) as err:
                     # Either the URL doesnt exist, or other error. Or the URL exists, but isn't a galaxy API
                     # root (not JSON, no 'available_versions') so try appending '/api/'
+                    if n_url.endswith('/api') or n_url.endswith('/api/'):
+                        raise
+
+                    # Let exceptions here bubble up but raise the original if this returns a 404 (/api/ wasn't found).
                     n_url = _urljoin(n_url, '/api/')
+                    try:
+                        data = self._call_galaxy(n_url, method='GET', error_context_msg=error_context_msg)
+                    except GalaxyError as new_err:
+                        if new_err.http_code == 404:
+                            raise err
+                        raise
 
-                    # let exceptions here bubble up
-                    data = self._call_galaxy(n_url, method='GET', error_context_msg=error_context_msg)
-                    if 'available_versions' not in data:
-                        raise AnsibleError("Tried to find galaxy API root at %s but no 'available_versions' are available on %s"
-                                           % (n_url, self.api_server))
+                if 'available_versions' not in data:
+                    raise AnsibleError("Tried to find galaxy API root at %s but no 'available_versions' are available "
+                                       "on %s" % (n_url, self.api_server))
 
-                # Update api_server to point to the "real" API root, which in this case
-                # was the configured url + '/api/' appended.
+                # Update api_server to point to the "real" API root, which in this case could have been the configured
+                # url + '/api/' appended.
                 self.api_server = n_url
 
                 # Default to only supporting v1, if only v1 is returned we also assume that v2 is available even though
@@ -185,7 +194,7 @@ class GalaxyAPI:
         try:
             display.vvvv("Calling Galaxy at %s" % url)
             resp = open_url(to_native(url), data=args, validate_certs=self.validate_certs, headers=headers,
-                            method=method, timeout=20, http_agent='ansible-galaxy/%s' % ansible_version)
+                            method=method, timeout=20, http_agent=user_agent(), follow_redirects='safe')
         except HTTPError as e:
             raise GalaxyError(e, error_context_msg)
         except Exception as e:
@@ -219,7 +228,7 @@ class GalaxyAPI:
         """
         url = _urljoin(self.api_server, self.available_api_versions['v1'], "tokens") + '/'
         args = urlencode({"github_token": github_token})
-        resp = open_url(url, data=args, validate_certs=self.validate_certs, method="POST")
+        resp = open_url(url, data=args, validate_certs=self.validate_certs, method="POST", http_agent=user_agent())
         data = json.loads(to_text(resp.read(), errors='surrogate_or_strict'))
         return data
 
@@ -426,7 +435,8 @@ class GalaxyAPI:
         form = [
             part_boundary,
             b"Content-Disposition: form-data; name=\"sha256\"",
-            to_bytes(secure_hash_s(data), errors='surrogate_or_strict'),
+            b"",
+            to_bytes(secure_hash_s(data, hash_func=hashlib.sha256), errors='surrogate_or_strict'),
             part_boundary,
             b"Content-Disposition: file; name=\"file\"; filename=\"%s\"" % b_file_name,
             b"Content-Type: application/octet-stream",
@@ -460,7 +470,6 @@ class GalaxyAPI:
             value for GalaxyAPI.publish_collection.
         :param timeout: The timeout in seconds, 0 is no timeout.
         """
-        # TODO: actually verify that v3 returns the same structure as v2, right now this is just an assumption.
         state = 'waiting'
         data = None
 
@@ -469,10 +478,8 @@ class GalaxyAPI:
             full_url = _urljoin(self.api_server, self.available_api_versions['v3'],
                                 'imports/collections', task_id, '/')
         else:
-            # TODO: Should we have a trailing slash here?  I'm working with what the unittests ask
-            # for but a trailing slash may be more correct
             full_url = _urljoin(self.api_server, self.available_api_versions['v2'],
-                                'collection-imports', task_id)
+                                'collection-imports', task_id, '/')
 
         display.display("Waiting until Galaxy import task %s has completed" % full_url)
         start = time.time()
@@ -523,7 +530,7 @@ class GalaxyAPI:
         :return: CollectionVersionMetadata about the collection at the version requested.
         """
         api_path = self.available_api_versions.get('v3', self.available_api_versions.get('v2'))
-        url_paths = [self.api_server, api_path, 'collections', namespace, name, 'versions', version]
+        url_paths = [self.api_server, api_path, 'collections', namespace, name, 'versions', version, '/']
 
         n_collection_url = _urljoin(*url_paths)
         error_context_msg = 'Error when getting collection version metadata for %s.%s:%s from %s (%s)' \
@@ -543,16 +550,18 @@ class GalaxyAPI:
         :param name: The collection name.
         :return: A list of versions that are available.
         """
+        relative_link = False
         if 'v3' in self.available_api_versions:
             api_path = self.available_api_versions['v3']
             results_key = 'data'
             pagination_path = ['links', 'next']
+            relative_link = True  # AH pagination results are relative an not an absolute URI.
         else:
             api_path = self.available_api_versions['v2']
             results_key = 'results'
             pagination_path = ['next']
 
-        n_url = _urljoin(self.api_server, api_path, 'collections', namespace, name, 'versions')
+        n_url = _urljoin(self.api_server, api_path, 'collections', namespace, name, 'versions', '/')
 
         error_context_msg = 'Error when getting available collection versions for %s.%s from %s (%s)' \
                             % (namespace, name, self.name, self.api_server)
@@ -568,6 +577,10 @@ class GalaxyAPI:
 
             if not next_link:
                 break
+            elif relative_link:
+                # TODO: This assumes the pagination result is relative to the root server. Will need to be verified
+                # with someone who knows the AH API.
+                next_link = n_url.replace(urlparse(n_url).path, next_link)
 
             data = self._call_galaxy(to_native(next_link, errors='surrogate_or_strict'),
                                      error_context_msg=error_context_msg)

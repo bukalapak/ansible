@@ -92,9 +92,6 @@ class AnsibleCoreCI:
             parallels=(
                 'osx',
             ),
-            vmware=(
-                'vmware'
-            ),
         )
 
         if provider:
@@ -123,14 +120,7 @@ class AnsibleCoreCI:
                 region = args.remote_aws_region
                 # use a dedicated CI key when overriding the region selection
                 self.ci_key += '.%s' % args.remote_aws_region
-            elif is_shippable():
-                # split Shippable jobs across multiple regions to maximize use of launch credits
-                if self.platform == 'windows':
-                    region = 'us-east-2'
-                else:
-                    region = 'us-east-1'
             else:
-                # send all non-Shippable jobs to us-east-1 to reduce api key maintenance
                 region = 'us-east-1'
 
             self.path = "%s-%s" % (self.path, region)
@@ -147,10 +137,6 @@ class AnsibleCoreCI:
 
             self.ssh_key = SshKey(args)
             self.port = None
-        elif self.provider == 'vmware':
-            self.ssh_key = SshKey(args)
-            self.endpoints = ['https://access.ws.testing.ansible.com']
-            self.max_threshold = 1
 
         else:
             raise ApplicationError('Unsupported platform: %s' % platform)
@@ -321,7 +307,7 @@ class AnsibleCoreCI:
                     password=con.get('password'),
                     response_json=response_json,
                 )
-            else:  # 'vcenter' resp does not have a 'connection' key
+            else:
                 self.connection = InstanceConnection(
                     running=status == 'running',
                     response_json=response_json,

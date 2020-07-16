@@ -14,21 +14,17 @@ import re
 
 from distutils.version import LooseVersion
 
-# HACK: keep Python 2.6 controller tests happy in CI until they're properly split
-try:
-    from importlib import import_module
-except ImportError:
-    import_module = __import__
-
 from ansible import constants as C
 from ansible.errors import AnsibleError
 from ansible.module_utils._text import to_bytes, to_native, to_text
+from ansible.module_utils.compat.importlib import import_module
 from ansible.plugins.loader import ps_module_utils_loader
 
 
 class PSModuleDepFinder(object):
 
     def __init__(self):
+        # This is also used by validate-modules to get a module's required utils in base and a collection.
         self.ps_modules = dict()
         self.exec_scripts = dict()
 

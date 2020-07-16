@@ -28,7 +28,6 @@ description:
     - Running in check mode will perform the authentication without updating the config file.
 options:
   registry_url:
-    required: False
     description:
       - The registry URL.
     type: str
@@ -38,16 +37,15 @@ options:
       - url
   username:
     description:
-      - The username for the registry account
+      - The username for the registry account.
+      - Required when I(state) is C(present).
     type: str
-    required: yes
   password:
     description:
-      - The plaintext password for the registry account
+      - The plaintext password for the registry account.
+      - Required when I(state) is C(present).
     type: str
-    required: yes
   email:
-    required: False
     description:
       - "The email address for the registry account."
     type: str
@@ -259,8 +257,13 @@ class LoginManager(DockerBaseClass):
 
     def write_config(self, path, config):
         try:
-            with open(path, "w") as file:
-                json.dump(config, file, indent=5, sort_keys=True)
+            # Write config; make sure it has permissions 0x600
+            content = json.dumps(config, indent=5, sort_keys=True).encode('utf-8')
+            f = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(f, content)
+            finally:
+                os.close(f)
         except Exception as exc:
             self.fail("Error: failed to write config to %s - %s" % (path, str(exc)))
 

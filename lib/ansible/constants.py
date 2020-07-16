@@ -102,7 +102,7 @@ DEFAULT_PASSWORD_CHARS = to_text(ascii_letters + digits + ".,:-_", errors='stric
 DEFAULT_REMOTE_PASS = None
 DEFAULT_SUBSET = None
 # FIXME: expand to other plugins, but never doc fragments
-CONFIGURABLE_PLUGINS = ('become', 'cache', 'callback', 'cliconf', 'connection', 'httpapi', 'inventory', 'lookup', 'shell')
+CONFIGURABLE_PLUGINS = ('become', 'cache', 'callback', 'cliconf', 'connection', 'httpapi', 'inventory', 'lookup', 'netconf', 'shell')
 # NOTE: always update the docs/docsite/Makefile to match
 DOCUMENTABLE_PLUGINS = CONFIGURABLE_PLUGINS + ('module', 'strategy', 'vars')
 IGNORE_FILES = ("COPYING", "CONTRIBUTING", "LICENSE", "README", "VERSION", "GUIDELINES")  # ignore during module search
@@ -110,7 +110,7 @@ INTERNAL_RESULT_KEYS = ('add_host', 'add_group')
 LOCALHOST = ('127.0.0.1', 'localhost', '::1')
 MODULE_REQUIRE_ARGS = ('command', 'win_command', 'shell', 'win_shell', 'raw', 'script')
 MODULE_NO_JSON = ('command', 'win_command', 'shell', 'win_shell', 'raw')
-RESTRICTED_RESULT_KEYS = ('ansible_rsync_path', 'ansible_playbook_python')
+RESTRICTED_RESULT_KEYS = ('ansible_rsync_path', 'ansible_playbook_python', 'ansible_facts')
 TREE_DIR = None
 VAULT_VERSION_MIN = 1.0
 VAULT_VERSION_MAX = 1.0

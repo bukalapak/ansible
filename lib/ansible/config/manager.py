@@ -137,7 +137,7 @@ def ensure_type(value, value_type, origin=None):
 
         elif value_type == 'pathlist':
             if isinstance(value, string_types):
-                value = value.split(',')
+                value = [x.strip() for x in value.split(',')]
 
             if isinstance(value, Sequence):
                 value = [resolve_path(x, basedir=basedir) for x in value]
@@ -145,13 +145,13 @@ def ensure_type(value, value_type, origin=None):
                 errmsg = 'pathlist'
 
         elif value_type in ('str', 'string'):
-            if isinstance(value, string_types):
+            if isinstance(value, (string_types, AnsibleVaultEncryptedUnicode)):
                 value = unquote(to_text(value, errors='surrogate_or_strict'))
             else:
                 errmsg = 'string'
 
         # defaults to string type
-        elif isinstance(value, string_types):
+        elif isinstance(value, (string_types, AnsibleVaultEncryptedUnicode)):
             value = unquote(to_text(value, errors='surrogate_or_strict'))
 
         if errmsg:
@@ -231,7 +231,7 @@ def find_ini_config_file(warnings=None):
             if os.path.exists(cwd_cfg):
                 warn_cmd_public = True
         else:
-            potential_paths.append(cwd_cfg)
+            potential_paths.append(to_text(cwd_cfg, errors='surrogate_or_strict'))
     except OSError:
         # If we can't access cwd, we'll simply skip it as a possible config source
         pass

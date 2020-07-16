@@ -33,6 +33,7 @@ from shutil import rmtree
 
 from ansible import context
 from ansible.errors import AnsibleError
+from ansible.galaxy.user_agent import user_agent
 from ansible.module_utils._text import to_native, to_text
 from ansible.module_utils.urls import open_url
 from ansible.playbook.role.requirement import RoleRequirement
@@ -65,8 +66,18 @@ class GalaxyRole(object):
         self.scm = scm
 
         if path is not None:
-            if self.name not in path:
+            if not path.endswith(os.path.join(os.path.sep, self.name)):
                 path = os.path.join(path, self.name)
+            else:
+                # Look for a meta/main.ya?ml inside the potential role dir in case
+                #  the role name is the same as parent directory of the role.
+                #
+                # Example:
+                #   ./roles/testing/testing/meta/main.yml
+                for meta_main in self.META_MAIN:
+                    if os.path.exists(os.path.join(path, name, meta_main)):
+                        path = os.path.join(path, self.name)
+                        break
             self.path = path
         else:
             # use the first path by default
@@ -179,7 +190,7 @@ class GalaxyRole(object):
             display.display("- downloading role from %s" % archive_url)
 
             try:
-                url_file = open_url(archive_url, validate_certs=self._validate_certs)
+                url_file = open_url(archive_url, validate_certs=self._validate_certs, http_agent=user_agent())
                 temp_file = tempfile.NamedTemporaryFile(delete=False)
                 data = url_file.read()
                 while data:
@@ -310,13 +321,15 @@ class GalaxyRole(object):
                             # bits that might be in the file for security purposes
                             # and drop any containing directory, as mentioned above
                             if member.isreg() or member.issym():
-                                parts = member.name.replace(archive_parent_dir, "", 1).split(os.sep)
-                                final_parts = []
-                                for part in parts:
-                                    if part != '..' and '~' not in part and '$' not in part:
-                                        final_parts.append(part)
-                                member.name = os.path.join(*final_parts)
-                                role_tar_file.extract(member, self.path)
+                                n_member_name = to_native(member.name)
+                                n_archive_parent_dir = to_native(archive_parent_dir)
+                                n_parts = n_member_name.replace(n_archive_parent_dir, "", 1).split(os.sep)
+                                n_final_parts = []
+                                for n_part in n_parts:
+                                    if n_part != '..' and '~' not in n_part and '$' not in n_part:
+                                        n_final_parts.append(n_part)
+                                member.name = os.path.join(*n_final_parts)
+                                role_tar_file.extract(member, to_native(self.path))
 
                         # write out the install info file for later use
                         self._write_galaxy_install_info()

@@ -272,9 +272,9 @@ Function Get-AnsibleWebRequest {
         } else {
             $proxy.Credentials = $null
         }
-
-        $web_request.Proxy = $proxy
     }
+
+    $web_request.Proxy = $proxy
 
     # Some parameters only apply when dealing with a HttpWebRequest
     if ($web_request -is [System.Net.HttpWebRequest]) {
@@ -316,9 +316,9 @@ Function Get-AnsibleWebRequest {
             none { $web_request.AllowAutoRedirect = $false }
             safe {
                 if ($web_request.Method -in @("GET", "HEAD")) {
-                    $web_request.AllowAutoRedirect = $false
-                } else {
                     $web_request.AllowAutoRedirect = $true
+                } else {
+                    $web_request.AllowAutoRedirect = $false
                 }
             }
             all { $web_request.AllowAutoRedirect = $true }

@@ -79,6 +79,8 @@ except ImportError:
 # Python2 & 3 way to get NoneType
 NoneType = type(None)
 
+from ansible.module_utils.compat import selectors
+
 from ._text import to_native, to_bytes, to_text
 from ansible.module_utils.common.text.converters import (
     jsonify,
@@ -752,7 +754,10 @@ class AnsibleModule(object):
         else:
             raise TypeError("warn requires a string not a %s" % type(warning))
 
-    def deprecate(self, msg, version=None):
+    def deprecate(self, msg, version=None, date=None, collection_name=None):
+        # `date` and `collection_name` are Ansible 2.10 parameters. We accept and ignore them,
+        # to avoid modules/plugins from 2.10 conformant collections to break with new enough
+        # versions of Ansible 2.9.
         if isinstance(msg, string_types):
             self._deprecations.append({
                 'msg': msg,
@@ -1438,7 +1443,7 @@ class AnsibleModule(object):
             if deprecation['name'] in param.keys():
                 self._deprecations.append(
                     {'msg': "Alias '%s' is deprecated. See the module docs for more information" % deprecation['name'],
-                     'version': deprecation['version']})
+                     'version': deprecation.get('version')})
         return alias_results
 
     def _handle_no_log_values(self, spec=None, param=None):
@@ -1940,15 +1945,14 @@ class AnsibleModule(object):
         for param in self.params:
             canon = self.aliases.get(param, param)
             arg_opts = self.argument_spec.get(canon, {})
-            no_log = arg_opts.get('no_log', False)
+            no_log = arg_opts.get('no_log', None)
 
-            if self.boolean(no_log):
-                log_args[param] = 'NOT_LOGGING_PARAMETER'
-            # try to capture all passwords/passphrase named fields missed by no_log
-            elif PASSWORD_MATCH.search(param) and arg_opts.get('type', 'str') != 'bool' and not arg_opts.get('choices', False):
-                # skip boolean and enums as they are about 'password' state
+            # try to proactively capture password/passphrase fields
+            if no_log is None and PASSWORD_MATCH.search(param):
                 log_args[param] = 'NOT_LOGGING_PASSWORD'
                 self.warn('Module did not set no_log for %s' % param)
+            elif self.boolean(no_log):
+                log_args[param] = 'NOT_LOGGING_PARAMETER'
             else:
                 param_val = self.params[param]
                 if not isinstance(param_val, (text_type, binary_type)):
@@ -2359,15 +2363,6 @@ class AnsibleModule(object):
             self.fail_json(msg='Could not write data to file (%s) from (%s): %s' % (dest, src, to_native(e)),
                            exception=traceback.format_exc())
 
-    def _read_from_pipes(self, rpipes, rfds, file_descriptor):
-        data = b('')
-        if file_descriptor in rfds:
-            data = os.read(file_descriptor.fileno(), self.get_buffer_size(file_descriptor))
-            if data == b(''):
-                rpipes.remove(file_descriptor)
-
-        return data
-
     def _clean_args(self, args):
 
         if not self._clean:
@@ -2453,9 +2448,10 @@ class AnsibleModule(object):
             are expanded before running the command. When ``True`` a string such as
             ``$SHELL`` will be expanded regardless of escaping. When ``False`` and
             ``use_unsafe_shell=False`` no path or variable expansion will be done.
-        :kw pass_fds: When running on python3 this argument
+        :kw pass_fds: When running on Python 3 this argument
             dictates which file descriptors should be passed
-            to an underlying ``Popen`` constructor.
+            to an underlying ``Popen`` constructor. On Python 2, this will
+            set ``close_fds`` to False.
         :kw before_communicate_callback: This function will be called
             after ``Popen`` object will be created
             but before communicating to the process.
@@ -2566,6 +2562,8 @@ class AnsibleModule(object):
         )
         if PY3 and pass_fds:
             kwargs["pass_fds"] = pass_fds
+        elif PY2 and pass_fds:
+            kwargs['close_fds'] = False
 
         # store the pwd
         prev_dir = os.getcwd()
@@ -2594,9 +2592,14 @@ class AnsibleModule(object):
             # the communication logic here is essentially taken from that
             # of the _communicate() function in ssh.py
 
-            stdout = b('')
-            stderr = b('')
-            rpipes = [cmd.stdout, cmd.stderr]
+            stdout = b''
+            stderr = b''
+            selector = selectors.DefaultSelector()
+            selector.register(cmd.stdout, selectors.EVENT_READ)
+            selector.register(cmd.stderr, selectors.EVENT_READ)
+            if os.name == 'posix':
+                fcntl.fcntl(cmd.stdout.fileno(), fcntl.F_SETFL, fcntl.fcntl(cmd.stdout.fileno(), fcntl.F_GETFL) | os.O_NONBLOCK)
+                fcntl.fcntl(cmd.stderr.fileno(), fcntl.F_SETFL, fcntl.fcntl(cmd.stderr.fileno(), fcntl.F_GETFL) | os.O_NONBLOCK)
 
             if data:
                 if not binary_data:
@@ -2607,9 +2610,15 @@ class AnsibleModule(object):
                 cmd.stdin.close()
 
             while True:
-                rfds, wfds, efds = select.select(rpipes, [], rpipes, 1)
-                stdout += self._read_from_pipes(rpipes, rfds, cmd.stdout)
-                stderr += self._read_from_pipes(rpipes, rfds, cmd.stderr)
+                events = selector.select(1)
+                for key, event in events:
+                    b_chunk = key.fileobj.read()
+                    if b_chunk == b(''):
+                        selector.unregister(key.fileobj)
+                    if key.fileobj == cmd.stdout:
+                        stdout += b_chunk
+                    elif key.fileobj == cmd.stderr:
+                        stderr += b_chunk
                 # if we're checking for prompts, do it now
                 if prompt_re:
                     if prompt_re.search(stdout) and not data:
@@ -2619,12 +2628,12 @@ class AnsibleModule(object):
                 # only break out if no pipes are left to read or
                 # the pipes are completely read and
                 # the process is terminated
-                if (not rpipes or not rfds) and cmd.poll() is not None:
+                if (not events or not selector.get_map()) and cmd.poll() is not None:
                     break
                 # No pipes are left to read but process is not yet terminated
                 # Only then it is safe to wait for the process to be finished
-                # NOTE: Actually cmd.poll() is always None here if rpipes is empty
-                elif not rpipes and cmd.poll() is None:
+                # NOTE: Actually cmd.poll() is always None here if no selectors are left
+                elif not selector.get_map() and cmd.poll() is None:
                     cmd.wait()
                     # The process is terminated. Since no pipes to read from are
                     # left, there is no need to call select() again.
@@ -2632,6 +2641,7 @@ class AnsibleModule(object):
 
             cmd.stdout.close()
             cmd.stderr.close()
+            selector.close()
 
             rc = cmd.returncode
         except (OSError, IOError) as e:

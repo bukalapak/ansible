@@ -211,13 +211,15 @@ options:
         description:
             - Operating system of the Virtual Machine.
             - Default value is set by oVirt/RHV engine.
-            - "Possible values: debian_7, freebsd, freebsdx64, other, other_linux,
-               other_linux_ppc64, other_ppc64, rhel_3, rhel_4, rhel_4x64, rhel_5, rhel_5x64,
-               rhel_6, rhel_6x64, rhel_6_ppc64, rhel_7x64, rhel_7_ppc64, sles_11, sles_11_ppc64,
-               ubuntu_12_04, ubuntu_12_10, ubuntu_13_04, ubuntu_13_10, ubuntu_14_04, ubuntu_14_04_ppc64,
-               windows_10, windows_10x64, windows_2003, windows_2003x64, windows_2008, windows_2008x64,
-               windows_2008r2x64, windows_2008R2x64, windows_2012x64, windows_2012R2x64, windows_7,
-               windows_7x64, windows_8, windows_8x64, windows_xp"
+            - "Possible values: debian_7, freebsd, freebsdx64, other, other_linux, other_linux_kernel_4,
+               other_linux_ppc64, other_linux_s390x, other_ppc64, other_s390x, rhcos_x64, rhel_3,
+               rhel_3x64, rhel_4, rhel_4x64, rhel_5, rhel_5x64, rhel_6, rhel_6_9_plus_ppc64,
+               rhel_6_ppc64, rhel_6x64, rhel_7_ppc64, rhel_7_s390x, rhel_7x64, rhel_8x64,
+               rhel_atomic7x64, sles_11, sles_11_ppc64, sles_12_s390x, ubuntu_12_04, ubuntu_12_10,
+               ubuntu_13_04, ubuntu_13_10, ubuntu_14_04, ubuntu_14_04_ppc64, ubuntu_16_04_s390x,
+               windows_10, windows_10x64, windows_2003, windows_2003x64, windows_2008,
+               windows_2008R2x64, windows_2008x64, windows_2012R2x64, windows_2012x64, windows_2016x64,
+               windows_2019x64, windows_7, windows_7x64, windows_8, windows_8x64, windows_xp"
     boot_devices:
         description:
             - List of boot devices which should be used to boot. For example C([ cdrom, hd ]).
@@ -304,6 +306,7 @@ options:
     cd_iso:
         description:
             - ISO file from ISO storage domain which should be attached to Virtual Machine.
+            - If you have multiple ISO disks with the same name use disk ID to specify which should be used.
             - If you pass empty string the CD will be ejected from VM.
             - If used with C(state) I(running) or I(present) and VM is running the CD will be attached to VM.
             - If used with C(state) I(running) or I(present) and VM is down the CD will be attached to VM persistently.
@@ -522,25 +525,21 @@ options:
         description:
             - "If I(true) C(kernel_params), C(initrd_path) and C(kernel_path) will persist in virtual machine configuration,
                if I(False) it will be used for run once."
-            - Usable with oVirt 4.3 and lower; removed in oVirt 4.4.
         type: bool
         version_added: "2.8"
     kernel_path:
         description:
             - Path to a kernel image used to boot the virtual machine.
             - Kernel image must be stored on either the ISO domain or on the host's storage.
-            - Usable with oVirt 4.3 and lower; removed in oVirt 4.4.
         version_added: "2.3"
     initrd_path:
         description:
             - Path to an initial ramdisk to be used with the kernel specified by C(kernel_path) option.
             - Ramdisk image must be stored on either the ISO domain or on the host's storage.
-            - Usable with oVirt 4.3 and lower; removed in oVirt 4.4.
         version_added: "2.3"
     kernel_params:
         description:
             - Kernel command line parameters (formatted as string) to be used with the kernel specified by C(kernel_path) option.
-            - Usable with oVirt 4.3 and lower; removed in oVirt 4.4.
         version_added: "2.3"
     instance_type:
         description:
@@ -727,16 +726,21 @@ options:
         suboptions:
             index:
                 description:
-                    - "The index of this NUMA node (mandatory)."
+                    - "The index of this NUMA node."
+                required: True
             memory:
                 description:
-                    - "Memory size of the NUMA node in MiB (mandatory)."
+                    - "Memory size of the NUMA node in MiB."
+                required: True
             cores:
                 description:
-                    - "list of VM CPU cores indexes to be included in this NUMA node (mandatory)."
+                    - "List of VM CPU cores indexes to be included in this NUMA node."
+                type: list
+                required: True
             numa_node_pins:
                 description:
-                    - "list of physical NUMA node indexes to pin this virtual NUMA node to."
+                    - "List of physical NUMA node indexes to pin this virtual NUMA node to."
+                type: list
         version_added: "2.6"
     rng_device:
         description:
@@ -1211,6 +1215,18 @@ EXAMPLES = '''
     snapshot_name: myvm_snap
     name: myvm_clone
     state: present
+
+- name: Import external ova VM
+  ovirt_vm:
+    cluster: mycluster
+    name: myvm
+    host: myhost
+    timeout: 1800
+    poll_interval: 30
+    kvm:
+      name: myvm
+      url: ova:///path/myvm.ova
+      storage_domain: mystorage
 '''
 
 
@@ -1252,7 +1268,6 @@ from ansible.module_utils.ovirt import (
     search_by_attributes,
     search_by_name,
     wait,
-    engine_supported,
 )
 
 
@@ -1271,30 +1286,31 @@ class VmsModule(BaseModule):
         """
         template = None
         templates_service = self._connection.system_service().templates_service()
-        if self.param('template'):
-            clusters_service = self._connection.system_service().clusters_service()
-            cluster = search_by_name(clusters_service, self.param('cluster'))
-            data_center = self._connection.follow_link(cluster.data_center)
-            templates = templates_service.list(
-                search='name=%s and datacenter=%s' % (self.param('template'), data_center.name)
-            )
-            if self.param('template_version'):
-                templates = [
-                    t for t in templates
-                    if t.version.version_number == self.param('template_version')
-                ]
-            if not templates:
-                raise ValueError(
-                    "Template with name '%s' and version '%s' in data center '%s' was not found'" % (
-                        self.param('template'),
-                        self.param('template_version'),
-                        data_center.name
-                    )
+        if self._is_new:
+            if self.param('template'):
+                clusters_service = self._connection.system_service().clusters_service()
+                cluster = search_by_name(clusters_service, self.param('cluster'))
+                data_center = self._connection.follow_link(cluster.data_center)
+                templates = templates_service.list(
+                    search='name=%s and datacenter=%s' % (self.param('template'), data_center.name)
                 )
-            template = sorted(templates, key=lambda t: t.version.version_number, reverse=True)[0]
-        elif self._is_new:
-            # If template isn't specified and VM is about to be created specify default template:
-            template = templates_service.template_service('00000000-0000-0000-0000-000000000000').get()
+                if self.param('template_version'):
+                    templates = [
+                        t for t in templates
+                        if t.version.version_number == self.param('template_version')
+                    ]
+                if not templates:
+                    raise ValueError(
+                        "Template with name '%s' and version '%s' in data center '%s' was not found'" % (
+                            self.param('template'),
+                            self.param('template_version'),
+                            data_center.name
+                        )
+                    )
+                template = sorted(templates, key=lambda t: t.version.version_number, reverse=True)[0]
+            else:
+                # If template isn't specified and VM is about to be created specify default template:
+                template = templates_service.template_service('00000000-0000-0000-0000-000000000000').get()
 
         return template
 
@@ -1661,20 +1677,33 @@ class VmsModule(BaseModule):
         self._wait_for_UP(vm_service)
         self._attach_cd(vm_service.get())
 
+    def __get_cd_id(self):
+        disks_service = self._connection.system_service().disks_service()
+        disks = disks_service.list(search='name="{0}"'.format(self.param('cd_iso')))
+        if len(disks) > 1:
+            raise ValueError('Found mutiple disks with same name "{0}" please use \
+                disk ID in "cd_iso" to specify which disk should be used.'.format(self.param('cd_iso')))
+        if not disks:
+            # The `cd_iso` is valid disk ID returning to _attach_cd
+            return disks_service.disk_service(self.param('cd_iso')).get().id
+        return disks[0].id
+
     def _attach_cd(self, entity):
-        cd_iso = self.param('cd_iso')
-        if cd_iso is not None:
+        cd_iso_id = self.param('cd_iso')
+        if cd_iso_id is not None:
+            if cd_iso_id:
+                cd_iso_id = self.__get_cd_id()
             vm_service = self._service.service(entity.id)
             current = vm_service.get().status == otypes.VmStatus.UP and self.param('state') == 'running'
             cdroms_service = vm_service.cdroms_service()
             cdrom_device = cdroms_service.list()[0]
             cdrom_service = cdroms_service.cdrom_service(cdrom_device.id)
             cdrom = cdrom_service.get(current=current)
-            if getattr(cdrom.file, 'id', '') != cd_iso:
+            if getattr(cdrom.file, 'id', '') != cd_iso_id:
                 if not self._module.check_mode:
                     cdrom_service.update(
                         cdrom=otypes.Cdrom(
-                            file=otypes.File(id=cd_iso)
+                            file=otypes.File(id=cd_iso_id)
                         ),
                         current=current,
                     )
@@ -1879,17 +1908,20 @@ class VmsModule(BaseModule):
                 )
             )
 
-    def __attach_numa_nodes(self, entity):
-        updated = False
-        numa_nodes_service = self._service.service(entity.id).numa_nodes_service()
+    def __get_numa_serialized(self, numa):
+        return sorted([(x.index,
+                        [y.index for y in x.cpu.cores] if x.cpu else [],
+                        x.memory,
+                        [y.index for y in x.numa_node_pins] if x.numa_node_pins else []
+                        ) for x in numa], key=lambda x: x[0])
 
+    def __attach_numa_nodes(self, entity):
+        numa_nodes_service = self._service.service(entity.id).numa_nodes_service()
+        existed_numa_nodes = numa_nodes_service.list()
         if len(self.param('numa_nodes')) > 0:
             # Remove all existing virtual numa nodes before adding new ones
-            existed_numa_nodes = numa_nodes_service.list()
-            existed_numa_nodes.sort(reverse=len(existed_numa_nodes) > 1 and existed_numa_nodes[1].index > existed_numa_nodes[0].index)
-            for current_numa_node in existed_numa_nodes:
+            for current_numa_node in sorted(existed_numa_nodes, reverse=True, key=lambda x: x.index):
                 numa_nodes_service.node_service(current_numa_node.id).remove()
-                updated = True
 
         for numa_node in self.param('numa_nodes'):
             if numa_node is None or numa_node.get('index') is None or numa_node.get('cores') is None or numa_node.get('memory') is None:
@@ -1913,9 +1945,7 @@ class VmsModule(BaseModule):
                     ] if numa_node.get('numa_node_pins') is not None else None,
                 )
             )
-            updated = True
-
-        return updated
+        return self.__get_numa_serialized(numa_nodes_service.list()) != self.__get_numa_serialized(existed_numa_nodes)
 
     def __attach_watchdog(self, entity):
         watchdogs_service = self._service.service(entity.id).watchdogs_service()
@@ -2152,13 +2182,13 @@ def _get_lun_mappings(module):
                             ['iscsi', 'fcp']) else None,
                         logical_units=[
                             otypes.LogicalUnit(
-                                id=lunMapping['dest_logical_unit_id'],
-                                port=lunMapping['dest_logical_unit_port'],
-                                portal=lunMapping['dest_logical_unit_portal'],
-                                address=lunMapping['dest_logical_unit_address'],
-                                target=lunMapping['dest_logical_unit_target'],
-                                password=lunMapping['dest_logical_unit_password'],
-                                username=lunMapping['dest_logical_unit_username'],
+                                id=lunMapping.get('dest_logical_unit_id'),
+                                port=lunMapping.get('dest_logical_unit_port'),
+                                portal=lunMapping.get('dest_logical_unit_portal'),
+                                address=lunMapping.get('dest_logical_unit_address'),
+                                target=lunMapping.get('dest_logical_unit_target'),
+                                password=lunMapping.get('dest_logical_unit_password'),
+                                username=lunMapping.get('dest_logical_unit_username'),
                             )
                         ],
                     ),
@@ -2256,15 +2286,6 @@ def import_vm(module, connection):
         poll_interval=module.params['poll_interval'],
     )
     return True
-
-
-def check_deprecated_params(module, connection):
-    if engine_supported(connection, '4.4') and \
-            (module.params.get('kernel_params_persist') is not None or
-             module.params.get('kernel_path') is not None or
-             module.params.get('initrd_path') is not None or
-             module.params.get('kernel_params') is not None):
-        module.warn("Parameters 'kernel_params_persist', 'kernel_path', 'initrd_path', 'kernel_params' are not supported since oVirt 4.4.")
 
 
 def control_state(vm, vms_service, module):
@@ -2415,7 +2436,6 @@ def main():
         state = module.params['state']
         auth = module.params.pop('auth')
         connection = create_connection(auth)
-        check_deprecated_params(module, connection)
         vms_service = connection.system_service().vms_service()
         vms_module = VmsModule(
             connection=connection,

@@ -51,6 +51,7 @@ options:
     upload_image_path:
         description:
             - "Path to disk image, which should be uploaded."
+            - "Note if C(size) is not specified the size of the disk will be determined by the size of the specified image."
             - "Note that currently we support only compatibility version 0.10 of the qcow disk."
             - "Note that you must have an valid oVirt/RHV engine CA in your system trust store
                or you must provide it in C(ca_file) parameter."
@@ -58,6 +59,7 @@ options:
                if you want to upload the disk even if the disk with C(id) or C(name) exists,
                then please use C(force) I(true). If you will use C(force) I(false), which
                is default, then the disk image won't be uploaded."
+            - "Note that to upload iso the C(format) should be 'raw'"
         version_added: "2.3"
     size:
         description:
@@ -69,11 +71,11 @@ options:
             - "Driver of the storage interface."
             - "It's required parameter when creating the new disk."
         choices: ['virtio', 'ide', 'virtio_scsi']
-        default: 'virtio'
     format:
         description:
             - Specify format of the disk.
             - Note that this option isn't idempotent as it's not currently possible to change format of the disk via API.
+        default: 'cow'
         choices: ['raw', 'cow']
     content_type:
         description:
@@ -92,7 +94,7 @@ options:
             - Note that this option isn't idempotent as it's not currently possible to change sparseness of the disk via API.
     storage_domain:
         description:
-            - "Storage domain name where disk should be created. By default storage is chosen by oVirt/RHV engine."
+            - "Storage domain name where disk should be created."
     storage_domains:
         description:
             - "Storage domain names where disk should be copied."
@@ -262,15 +264,16 @@ EXAMPLES = '''
 
 # Defining a specific quota while creating a disk image:
 # Since Ansible 2.5
-- ovirt_quotas_facts:
+- ovirt_quotas_info:
     data_center: Default
     name: myquota
+  register: quota
 - ovirt_disk:
     name: mydisk
     size: 10GiB
     storage_domain: data
     description: somedescriptionhere
-    quota_id: "{{ ovirt_quotas[0]['id'] }}"
+    quota_id: "{{ quota.ovirt_quotas[0]['id'] }}"
 
 # Upload an ISO image
 # Since Ansible 2.8
@@ -342,6 +345,25 @@ from ansible.module_utils.ovirt import (
 )
 
 
+def create_transfer_connection(module, transfer, context, connect_timeout=10, read_timeout=60):
+    url = urlparse(transfer.transfer_url)
+    connection = HTTPSConnection(
+        url.netloc, context=context, timeout=connect_timeout)
+    try:
+        connection.connect()
+    except OSError as e:
+        # Typically ConnectionRefusedError or socket.gaierror.
+        module.warn("Cannot connect to %s, trying %s: %s" % (transfer.transfer_url, transfer.proxy_url, e))
+
+        url = urlparse(transfer.proxy_url)
+        connection = HTTPSConnection(
+            url.netloc, context=context, timeout=connect_timeout)
+        connection.connect()
+
+    connection.sock.settimeout(read_timeout)
+    return connection, url
+
+
 def _search_by_lun(disks_service, lun_id):
     """
     Find disk by LUN ID.
@@ -373,7 +395,6 @@ def transfer(connection, module, direction, transfer_func):
             time.sleep(module.params['poll_interval'])
             transfer = transfer_service.get()
 
-        proxy_url = urlparse(transfer.proxy_url)
         context = ssl.create_default_context()
         auth = module.params['auth']
         if auth.get('insecure'):
@@ -382,17 +403,11 @@ def transfer(connection, module, direction, transfer_func):
         elif auth.get('ca_file'):
             context.load_verify_locations(cafile=auth.get('ca_file'))
 
-        proxy_connection = HTTPSConnection(
-            proxy_url.hostname,
-            proxy_url.port,
-            context=context,
-        )
-
+        transfer_connection, transfer_url = create_transfer_connection(module, transfer, context)
         transfer_func(
             transfer_service,
-            proxy_connection,
-            proxy_url,
-            transfer.signed_ticket
+            transfer_connection,
+            transfer_url,
         )
         return True
     finally:
@@ -423,17 +438,10 @@ def transfer(connection, module, direction, transfer_func):
 
 
 def download_disk_image(connection, module):
-    def _transfer(transfer_service, proxy_connection, proxy_url, transfer_ticket):
+    def _transfer(transfer_service, transfer_connection, transfer_url):
         BUF_SIZE = 128 * 1024
-        transfer_headers = {
-            'Authorization': transfer_ticket,
-        }
-        proxy_connection.request(
-            'GET',
-            proxy_url.path,
-            headers=transfer_headers,
-        )
-        r = proxy_connection.getresponse()
+        transfer_connection.request('GET', transfer_url.path)
+        r = transfer_connection.getresponse()
         path = module.params["download_image_path"]
         image_size = int(r.getheader('Content-Length'))
         with open(path, "wb") as mydisk:
@@ -455,14 +463,14 @@ def download_disk_image(connection, module):
 
 
 def upload_disk_image(connection, module):
-    def _transfer(transfer_service, proxy_connection, proxy_url, transfer_ticket):
+    def _transfer(transfer_service, transfer_connection, transfer_url):
         BUF_SIZE = 128 * 1024
         path = module.params['upload_image_path']
 
         image_size = os.path.getsize(path)
-        proxy_connection.putrequest("PUT", proxy_url.path)
-        proxy_connection.putheader('Content-Length', "%d" % (image_size,))
-        proxy_connection.endheaders()
+        transfer_connection.putrequest("PUT", transfer_url.path)
+        transfer_connection.putheader('Content-Length', "%d" % (image_size,))
+        transfer_connection.endheaders()
         with open(path, "rb") as disk:
             pos = 0
             while pos < image_size:
@@ -471,7 +479,7 @@ def upload_disk_image(connection, module):
                 if not chunk:
                     transfer_service.pause()
                     raise RuntimeError("Unexpected end of file at pos=%d" % pos)
-                proxy_connection.send(chunk)
+                transfer_connection.send(chunk)
                 pos += len(chunk)
 
     return transfer(
@@ -487,6 +495,9 @@ class DisksModule(BaseModule):
     def build_entity(self):
         hosts_service = self._connection.system_service().hosts_service()
         logical_unit = self._module.params.get('logical_unit')
+        size = convert_to_bytes(self._module.params.get('size'))
+        if not size and self._module.params.get('upload_image_path'):
+            size = os.path.getsize(self._module.params.get('upload_image_path'))
         disk = otypes.Disk(
             id=self._module.params.get('id'),
             name=self._module.params.get('name'),
@@ -505,9 +516,7 @@ class DisksModule(BaseModule):
             openstack_volume_type=otypes.OpenStackVolumeType(
                 name=self.param('openstack_volume_type')
             ) if self.param('openstack_volume_type') else None,
-            provisioned_size=convert_to_bytes(
-                self._module.params.get('size')
-            ),
+            provisioned_size=size,
             storage_domains=[
                 otypes.StorageDomain(
                     name=self._module.params.get('storage_domain'),
@@ -536,9 +545,7 @@ class DisksModule(BaseModule):
             ) if logical_unit else None,
         )
         if hasattr(disk, 'initial_size') and self._module.params['upload_image_path']:
-            disk.initial_size = convert_to_bytes(
-                self._module.params.get('size')
-            )
+            disk.initial_size = size
 
         return disk
 
@@ -726,12 +733,13 @@ def main():
         if state in ('present', 'detached', 'attached'):
             # Always activate disk when its being created
             if vm_service is not None and disk is None:
-                module.params['activate'] = True
+                module.params['activate'] = module.params['activate'] is None or module.params['activate']
             ret = disks_module.create(
                 entity=disk if not force_create else None,
                 result_state=otypes.DiskStatus.OK if lun is None else None,
                 fail_condition=lambda d: d.status == otypes.DiskStatus.ILLEGAL if lun is None else False,
                 force_create=force_create,
+                _wait=True if module.params['upload_image_path'] else module.params['wait'],
             )
             is_new_disk = ret['changed']
             ret['changed'] = ret['changed'] or disks_module.update_storage_domains(ret['id'])
@@ -741,6 +749,8 @@ def main():
 
             # Upload disk image in case it's new disk or force parameter is passed:
             if module.params['upload_image_path'] and (is_new_disk or module.params['force']):
+                if module.params['format'] == 'cow' and module.params['content_type'] == 'iso':
+                    module.warn("To upload an ISO image 'format' parameter needs to be set to 'raw'.")
                 uploaded = upload_disk_image(connection, module)
                 ret['changed'] = ret['changed'] or uploaded
             # Download disk image in case it's file don't exist or force parameter is passed:

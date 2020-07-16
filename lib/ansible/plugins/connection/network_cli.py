@@ -273,6 +273,7 @@ options:
         - name: ansible_network_cli_retries
 """
 
+from functools import wraps
 import getpass
 import json
 import logging
@@ -290,8 +291,18 @@ from ansible.module_utils.six.moves import cPickle
 from ansible.module_utils.network.common.utils import to_list
 from ansible.module_utils._text import to_bytes, to_text
 from ansible.playbook.play_context import PlayContext
-from ansible.plugins.connection import NetworkConnectionBase, ensure_connect
+from ansible.plugins.connection import NetworkConnectionBase
 from ansible.plugins.loader import cliconf_loader, terminal_loader, connection_loader
+
+
+def ensure_connect(func):
+    @wraps(func)
+    def wrapped(self, *args, **kwargs):
+        if not self._connected:
+            self._connect()
+        self.update_cli_prompt_context()
+        return func(self, *args, **kwargs)
+    return wrapped
 
 
 class AnsibleCmdRespRecv(Exception):
@@ -315,10 +326,15 @@ class Connection(NetworkConnectionBase):
         self._last_response = None
         self._history = list()
         self._command_response = None
+        self._last_recv_window = None
 
         self._terminal = None
         self.cliconf = None
-        self.paramiko_conn = None
+        self._paramiko_conn = None
+
+        # Managing prompt context
+        self._check_prompt = False
+        self._task_uuid = to_text(kwargs.get('task_uuid', ''))
 
         if self._play_context.verbosity > 3:
             logging.getLogger('paramiko').setLevel(logging.DEBUG)
@@ -341,6 +357,13 @@ class Connection(NetworkConnectionBase):
                 'manually configure ansible_network_os value for this host'
             )
         self.queue_message('log', 'network_os is set to %s' % self._network_os)
+
+    @property
+    def paramiko_conn(self):
+        if self._paramiko_conn is None:
+            self._paramiko_conn = connection_loader.get('paramiko', self._play_context, '/dev/null')
+            self._paramiko_conn.set_options(direct={'look_for_keys': not bool(self._play_context.password and not self._play_context.private_key_file)})
+        return self._paramiko_conn
 
     def _get_log_channel(self):
         name = "p=%s u=%s | " % (os.getpid(), getpass.getuser())
@@ -401,14 +424,21 @@ class Connection(NetworkConnectionBase):
         if hasattr(self, 'disable_response_logging'):
             self.disable_response_logging()
 
+    def set_check_prompt(self, task_uuid):
+        self._check_prompt = task_uuid
+
+    def update_cli_prompt_context(self):
+        # set cli prompt context at the start of new task run only
+        if self._check_prompt and self._task_uuid != self._check_prompt:
+            self._task_uuid, self._check_prompt = self._check_prompt, False
+            self.set_cli_prompt_context()
+
     def _connect(self):
         '''
         Connects to the remote device and starts the terminal
         '''
         if not self.connected:
-            self.paramiko_conn = connection_loader.get('paramiko', self._play_context, '/dev/null')
             self.paramiko_conn._set_log_channel(self._get_log_channel())
-            self.paramiko_conn.set_options(direct={'look_for_keys': not bool(self._play_context.password and not self._play_context.private_key_file)})
             self.paramiko_conn.force_persistence = self.force_persistence
 
             command_timeout = self.get_option('persistent_command_timeout')
@@ -451,7 +481,7 @@ class Connection(NetworkConnectionBase):
             self.queue_message('vvvv', 'firing event: on_open_shell()')
             self._terminal.on_open_shell()
 
-            if self._play_context.become and self._play_context.become_method == 'enable':
+            if self._play_context.become:
                 self.queue_message('vvvv', 'firing event: on_become')
                 auth_pass = self._play_context.become_pass
                 self._terminal.on_become(passwd=auth_pass)
@@ -475,7 +505,7 @@ class Connection(NetworkConnectionBase):
                 self.queue_message('debug', "cli session is now closed")
 
                 self.paramiko_conn.close()
-                self.paramiko_conn = None
+                self._paramiko_conn = None
                 self.queue_message('debug', "ssh connection has been closed successfully")
         super(Connection, self).close()
 
@@ -537,6 +567,7 @@ class Connection(NetworkConnectionBase):
             recv.seek(offset)
 
             window = self._strip(recv.read())
+            self._last_recv_window = window
             window_count += 1
 
             if prompts and not handled:

@@ -99,7 +99,7 @@ EXAMPLES = r'''
   postgresql_set:
     name: work_mem
     value: 32mb
-    register: set
+  register: set
 
 - debug:
     msg: "{{ set.name }} {{ set.prev_val_pretty }} >> {{ set.value_pretty }} restart_req: {{ set.restart_required }}"
@@ -185,9 +185,9 @@ POSSIBLE_SIZE_UNITS = ("mb", "gb", "tb")
 
 def param_get(cursor, module, name):
     query = ("SELECT name, setting, unit, context, boot_val "
-             "FROM pg_settings WHERE name = '%s'" % name)
+             "FROM pg_settings WHERE name = %(name)s")
     try:
-        cursor.execute(query)
+        cursor.execute(query, {'name': name})
         info = cursor.fetchall()
         cursor.execute("SHOW %s" % name)
         val = cursor.fetchone()
@@ -300,7 +300,7 @@ def main():
     # Allow to pass values like 1mb instead of 1MB, etc:
     if value:
         for unit in POSSIBLE_SIZE_UNITS:
-            if unit in value:
+            if value[:-2].isdigit() and unit in value[-2:]:
                 value = value.upper()
 
     if value and reset:

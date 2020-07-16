@@ -588,7 +588,7 @@ def ensure_file_attributes(path, follow, timestamps):
     if prev_state not in ('file', 'hard'):
         # file is not absent and any other state is a conflict
         raise AnsibleModuleError(results={'msg': 'file (%s) is %s, cannot continue' % (path, prev_state),
-                                          'path': path})
+                                          'path': path, 'state': prev_state})
 
     diff = initial_diff(path, 'file', prev_state)
     changed = module.set_fs_attributes_if_different(file_args, False, diff, expand=False)
@@ -886,7 +886,7 @@ def main():
             recurse=dict(type='bool', default=False),
             force=dict(type='bool', default=False),  # Note: Should not be in file_common_args in future
             follow=dict(type='bool', default=True),  # Note: Different default than file_common_args
-            _diff_peek=dict(type='str'),  # Internal use only, for internal checks in the action plugins
+            _diff_peek=dict(type='bool'),  # Internal use only, for internal checks in the action plugins
             src=dict(type='path'),  # Note: Should not be in file_common_args in future
             modification_time=dict(type='str'),
             modification_time_format=dict(type='str', default='%Y%m%d%H%M.%S'),

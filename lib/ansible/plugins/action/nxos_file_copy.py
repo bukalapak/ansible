@@ -24,7 +24,8 @@ import re
 import time
 
 from ansible.errors import AnsibleError
-from ansible.module_utils._text import to_text, to_bytes
+from ansible.module_utils._text import to_text, to_bytes, to_native
+from ansible.module_utils.common import validation
 from ansible.module_utils.connection import Connection
 from ansible.plugins.action import ActionBase
 from ansible.module_utils.six.moves.urllib.parse import urlsplit
@@ -62,9 +63,9 @@ class ActionModule(ActionBase):
             file_pull_timeout=dict(type='int', default=300),
             file_pull_compact=dict(type='bool', default=False),
             file_pull_kstack=dict(type='bool', default=False),
-            local_file=dict(type='str'),
-            local_file_directory=dict(type='str'),
-            remote_file=dict(type='str'),
+            local_file=dict(type='path'),
+            local_file_directory=dict(type='path'),
+            remote_file=dict(type='path'),
             remote_scp_server=dict(type='str'),
             remote_scp_server_user=dict(type='str'),
             remote_scp_server_password=dict(no_log=True),
@@ -76,24 +77,23 @@ class ActionModule(ActionBase):
             playvals[key] = self._task.args.get(key, argument_spec[key].get('default'))
             if playvals[key] is None:
                 continue
-            if argument_spec[key].get('type') is None:
-                argument_spec[key]['type'] = 'str'
-            type_ok = False
-            type = argument_spec[key]['type']
-            if type == 'str':
-                if isinstance(playvals[key], six.string_types):
-                    type_ok = True
-            elif type == 'int':
-                if isinstance(playvals[key], int):
-                    type_ok = True
-            elif type == 'bool':
-                if isinstance(playvals[key], bool):
-                    type_ok = True
-            else:
-                raise AnsibleError('Unrecognized type <{0}> for playbook parameter <{1}>'.format(type, key))
 
-            if not type_ok:
-                raise AnsibleError('Playbook parameter <{0}> value should be of type <{1}>'.format(key, type))
+            option_type = argument_spec[key].get('type', 'str')
+            try:
+                if option_type == 'str':
+                    playvals[key] = validation.check_type_str(playvals[key])
+                elif option_type == 'int':
+                    playvals[key] = validation.check_type_int(playvals[key])
+                elif option_type == 'bool':
+                    playvals[key] = validation.check_type_bool(playvals[key])
+                elif option_type == 'path':
+                    playvals[key] = validation.check_type_path(playvals[key])
+                else:
+                    raise AnsibleError('Unrecognized type <{0}> for playbook parameter <{1}>'.format(option_type, key))
+
+            except (TypeError, ValueError) as e:
+                raise AnsibleError("argument %s is of type %s and we were unable to convert to %s: %s"
+                                   % (key, type(playvals[key]), option_type, to_native(e)))
 
         # Validate playbook dependencies
         if playvals['file_pull']:
@@ -144,7 +144,9 @@ class ActionModule(ActionBase):
         filecontent = to_bytes(filecontent, errors='surrogate_or_strict')
         local_filehash = hashlib.md5(filecontent).hexdigest()
 
-        if local_filehash == remote_filehash:
+        decoded_rhash = remote_filehash.decode("UTF-8")
+
+        if local_filehash == decoded_rhash:
             return True
         else:
             return False
@@ -152,6 +154,7 @@ class ActionModule(ActionBase):
     def remote_file_exists(self, remote_file, file_system):
         command = 'dir {0}/{1}'.format(file_system, remote_file)
         body = self.conn.exec_command(command)
+
         if 'No such file' in body:
             return False
         else:
@@ -239,7 +242,7 @@ class ActionModule(ActionBase):
         self.results['failed'] = False
         nxos_hostname = self.play_context.remote_addr
         nxos_username = self.play_context.remote_user
-        nxos_password = self.play_context.password
+        nxos_password = self.play_context.password or ""
         port = self.playvals['connect_ssh_port']
 
         # Build copy command components that will be used to initiate copy from the nxos device.
@@ -318,8 +321,10 @@ class ActionModule(ActionBase):
                 outcome['existing_file_with_same_name'] = True
                 return outcome
             elif index in [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
-                before = session.before.strip().replace(' \x08', '')
-                after = session.after.strip().replace(' \x08', '')
+                decoded_before = session.before.decode("UTF-8")
+                decoded_after = session.after.decode("UTF-8")
+                before = decoded_before.strip().replace(" \x08", "")
+                after = decoded_after.strip().replace(" \x08", "")
                 outcome['error'] = True
                 outcome['error_data'] = 'COMMAND {0} ERROR {1}'.format(before, after)
                 return outcome
@@ -471,10 +476,10 @@ class ActionModule(ActionBase):
         self.play_context = copy.deepcopy(self._play_context)
         self.results = super(ActionModule, self).run(task_vars=task_vars)
 
-        if self.play_context.connection != 'network_cli':
+        if self.play_context.connection.split('.')[-1] != 'network_cli':
             # Plugin is supported only with network_cli
             self.results['failed'] = True
-            self.results['msg'] = ('Connection type must be <network_cli>')
+            self.results['msg'] = 'Connection type must be fully qualified name for network_cli connection type, got %s' % self.play_context.connection
             return self.results
 
         # Get playbook values

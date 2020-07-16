@@ -252,7 +252,12 @@ class Interfaces(FactsBase):
 
     def populate_structured_interfaces(self, data):
         interfaces = dict()
-        for item in data['TABLE_interface']['ROW_interface']:
+        data = data["TABLE_interface"]["ROW_interface"]
+
+        if isinstance(data, dict):
+            data = [data]
+
+        for item in data:
             name = item['interface']
 
             intf = dict()
@@ -604,8 +609,12 @@ class Legacy(FactsBase):
 
     def parse_structured_interfaces(self, data):
         objects = list()
-        for item in data['TABLE_interface']['ROW_interface']:
-            objects.append(item['interface'])
+        data = data["TABLE_interface"]["ROW_interface"]
+        if isinstance(data, dict):
+            objects.append(data["interface"])
+        elif isinstance(data, list):
+            for item in data:
+                objects.append(item["interface"])
         return objects
 
     def parse_structured_vlans(self, data):
@@ -627,13 +636,19 @@ class Legacy(FactsBase):
 
     def parse_structured_fan_info(self, data):
         objects = list()
-        if data.get('fandetails'):
-            data = data['fandetails']['TABLE_faninfo']['ROW_faninfo']
-        elif data.get('fandetails_3k'):
-            data = data['fandetails_3k']['TABLE_faninfo']['ROW_faninfo']
-        else:
-            return objects
-        objects = list(self.transform_iterable(data, self.FAN_MAP))
+
+        for key in ("fandetails", "fandetails_3k"):
+            if data.get(key):
+                try:
+                    data = data[key]['TABLE_faninfo']['ROW_faninfo']
+                except KeyError:
+                    # Some virtual images don't actually report faninfo. In this case, move on and
+                    # just return an empty list.
+                    pass
+                else:
+                    objects = list(self.transform_iterable(data, self.FAN_MAP))
+                break
+
         return objects
 
     def parse_structured_power_supply_info(self, data):

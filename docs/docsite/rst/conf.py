@@ -142,10 +142,12 @@ html_context = {
     'github_repo': 'ansible',
     'github_version': 'devel/docs/docsite/rst/',
     'github_module_version': 'devel/lib/ansible/modules/',
+    'github_root_dir': 'devel/lib/ansible',
+    'github_cli_version': 'devel/lib/ansible/cli/',
     'current_version': version,
     'latest_version': '2.9',
     # list specifically out of order to make latest work
-    'available_versions': ('latest', '2.8', '2.7', 'devel'),
+    'available_versions': ('latest', '2.9_ja', '2.8', '2.7', 'devel'),
     'css_files': ('_static/ansible.css',  # overrides to the standard theme
                   ),
 }
@@ -206,7 +208,7 @@ html_copy_source = False
 # If true, an OpenSearch description file will be output, and all pages will
 # contain a <link> tag referring to it.  The value of this option must be the
 # base URL from which the finished HTML is served.
-html_use_opensearch = 'https://docs.ansible.com/ansible/latest'
+# html_use_opensearch = 'https://docs.ansible.com/ansible/latest'
 
 # If nonempty, this is the file name suffix for HTML files (e.g. ".xhtml").
 # html_file_suffix = ''
